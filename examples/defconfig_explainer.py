@@ -9,7 +9,7 @@ import argparse
 from kconfiglib import Kconfig, expr_value, \
                        Symbol, Choice, MENU, COMMENT, BOOL, TRISTATE, STRING, INT, HEX, UNKNOWN
 
-class DefConfigPrinter:
+class DefConfigExplainer:
 
     class Node:
         def __init__(self, menu_node, parent, level):
@@ -68,7 +68,7 @@ class DefConfigPrinter:
     def __init__(self, kconfig_file, options={}):
         self.kconf = Kconfig(kconfig_file)
 
-        self.options = DefConfigPrinter.options()
+        self.options = DefConfigExplainer.options()
         self.update_options(options)
         self.update_kconf_option()
         
@@ -307,7 +307,7 @@ class DefConfigPrinter:
         first_node = None
         prev_node  = None
         while menu_node:
-            curr_node = DefConfigPrinter.Node(menu_node, parent_node, level)
+            curr_node = DefConfigExplainer.Node(menu_node, parent_node, level)
             ## print(f"===> {curr_node.menu_node}")
             ## print(f"    visibility {curr_node.menu_node.visibility}")
             ## print(f"    referenced {curr_node.menu_node.referenced}")
@@ -395,74 +395,74 @@ def main():
     ld                = os.getenv("LD", f"{cross_compile}ld" )
     verbose           = False
     recommended       = False
-    print_options     = DefConfigPrinter.options()
+    print_options     = DefConfigExplainer.options()
                               
-    parser = argparse.ArgumentParser(description='Print detailed defconfig')
+    parser = argparse.ArgumentParser(description="""Defconfig Explainer -- Script to add Kconfig prompts, help, and other explanations to defconfig""")
     parser.add_argument('load_files',
                         nargs   = '*',
-                        help    = 'Input defconfig files',
                         type    = str,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = """Input defconfig files""")
     parser.add_argument('-m', '--merge',
-                        help    = 'Merge defconfig files',
                         type    = str,
-                        action  = 'append')
+                        action  = 'append',
+                        help    = """Merge defconfig files""")
     parser.add_argument('-p', '--preload',
-                        help    = 'Preload defconfig files',
                         type    = str,
-                        action  = 'append')
+                        action  = 'append',
+                        help    = """Preload defconfig files""")
     parser.add_argument('-k', '--kconfig',
-                        help    = f"Kconfig File (default={kconfig_file})",
                         type    = str,
                         default = kconfig_file,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = f"Kconfig File (default={kconfig_file})"),
     parser.add_argument('-o', '--output',
-                        help    = "Output File (default=stdout)",
                         type    = str,
                         default = output_file,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = """Output File (default=stdout)"""),
     parser.add_argument('-a', '--arch',
-                        help    = f"Architecture (default={arch})",
                         default = arch,
                         type    = str,
-                        action='store')
+                        action='store',
+                        help    = f"Architecture (default={arch})"),
     parser.add_argument('--srcarch',
-                        help    = 'Architecture on Source',
                         type    = str,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = """Architecture on Source"""),
     parser.add_argument('--srctree',
-                        help    = f"Source Tree Path (default={srctree})",
                         type    = str,
                         default = srctree,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = f"Source Tree Path (default={srctree})"),
     parser.add_argument('--cross-compile',
-                        help    = f"Cross Compiler Prefix (default={cross_compile})",
                         type    = str,
                         default = cross_compile,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = f"Cross Compiler Prefix (default={cross_compile})"),
     parser.add_argument('--cc',
                         help    = f"C Compiler Command (default={cc})",
                         type    = str,
                         default = cc ,
                         action  = 'store')
     parser.add_argument('--ld',
-                        help    = f"Linker Command (default={ld})",
                         type    = str,
                         default = ld,
-                        action  = 'store')
+                        action  = 'store',
+                        help    = f"Linker Command (default={ld})"),
     parser.add_argument('-r', '--recommended',
-                        help    = 'Recommended Print Option',
-                        action  = 'store_true')
+                        action  = 'store_true',
+                        help    = """Recommended Print Option"""),
     parser.add_argument('-O', '--option',
-                        help    = "OPTION in KEY or kKEY=VALUE)",
                         default = [],
-                        action  = 'append')
+                        action  = 'append',
+                        help    = """OPTION in KEY or kKEY=VALUE)"""),
     parser.add_argument('--option-help',
-                        help    = "OPTION help",
-                        action  = 'store_true')
+                        action  = 'store_true',
+                        help    = """OPTION help"""),
     parser.add_argument('-v', '--verbose',
-                        help    = 'Verbose',
-                        action  = 'store_true')
+                        action  = 'store_true',
+                        help    = """Verbose"""),
 
     args = parser.parse_args()
 
@@ -512,11 +512,11 @@ def main():
         for info in option_list :
             option_help_list.append(_format.format(info["name"], info["help"], info["default"]))
         
-        print(f" -O OPTION, --option OPTION")
-        print(f"    OPTION in KEY or KEY=VALUE")
+        print(f"  -O OPTION, --option OPTION")
+        print(f"     OPTION in KEY or KEY=VALUE")
         for help in option_help_list:
             print(f"     {help}")
-        exit()
+        sys.exit(0)
 
     print_format_params = {}
     if recommended is True:
@@ -578,8 +578,8 @@ def main():
         print(f"## preload defconfig files = {preload_files}")
         print(f"## load defconfig files    = {load_files}")
         print(f"## merge defconfig files   = {merge_files}")
-        print(f"## output file = {output_file}")
-        print(f"## print_format_params = {print_format_params}")
+        print(f"## output file             = {output_file}")
+        print(f"## print_format_params     = {print_format_params}")
 
     os.environ["ARCH"]    = arch
     os.environ["SRCARCH"] = srcarch
@@ -589,18 +589,18 @@ def main():
 
     options = {"undef_warnings": True}
 
-    printer = DefConfigPrinter(os.path.join(srctree, kconfig_file), options)
-    printer.preload_config_files(defconfig_files=preload_files)
-    printer.load_config_files(defconfig_files=load_files , replace=True )
-    printer.load_config_files(defconfig_files=merge_files, replace=False)
+    explainer = DefConfigExplainer(os.path.join(srctree, kconfig_file), options)
+    explainer.preload_config_files(defconfig_files=preload_files)
+    explainer.load_config_files(defconfig_files=load_files , replace=True )
+    explainer.load_config_files(defconfig_files=merge_files, replace=False)
     
-    printer.generate_print_format(print_format_params)
+    explainer.generate_print_format(print_format_params)
 
     if output_file is None:
-        printer.print()
+        explainer.print()
     else:
         with open(output_file, "w") as f:
-            printer.print(file=f)
+            explainer.print(file=f)
 
 if __name__ == "__main__":
     main()
