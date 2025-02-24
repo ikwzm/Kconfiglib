@@ -36,9 +36,10 @@ class DefConfigPrinter:
         "print_max_column"      : (80    , "print max column"),
         "print_comment"         : (False , "print prompt with comment"),
         "print_help"            : (False , "print prompt with help"),
-        "print_orig_config"     : (False , "print prompt with original config"),
         "print_location"        : (False , "print prompt with location"),
+        "print_orig_config"     : (False , "print prompt with original config"),
         "print_choice_item"     : (False , "print choice item"),
+        "print_same_level_item" : (False , "print same level as defined config"),
         "prompt_indent_char"    : ('#'   , None),
         "separator_indent_char" : ('#'   , None),
         "info_indent_char"      : ('#'   , None),
@@ -116,7 +117,7 @@ class DefConfigPrinter:
                 if   value.lower() in ["y", "yes", "true" ]:
                     new_value = True
                 elif value.lower() in ["n", "no" , "false"]:
-                    new_value = Fale
+                    new_value = False
             elif old_value.__class__ == value.__class__:
                new_value = value
         if new_value is None:
@@ -141,33 +142,30 @@ class DefConfigPrinter:
         
     def generate_print_format(self, options={}):
         self.update_options(options)
-        _print_first_level     = self.get_option("print_first_level")
-        _print_comment         = self.get_option("print_comment")
-        _print_help            = self.get_option("print_help")
-        _print_orig_config     = self.get_option("print_orig_config")
-        _print_location        = self.get_option("print_location")
-        _print_choice_item     = self.get_option("print_choice_item")
-        _print_max_column      = self.get_option("print_max_column")
-        _prompt_indent_char    = self.get_option("prompt_indent_char")
-        _separator_indent_char = self.get_option("separator_indent_char")
-        _separator_char_list   = self.get_option("separator_char_list")
-        _separator_format      = self.get_option("separator_format")
-        _info_indent_char      = self.get_option("info_indent_char")
-        _prompt_format         = self.get_option("prompt_format")
-        _help_format           = self.get_option("help_format")
-        _help_line_format      = self.get_option("help_line_format")
-        _orig_config_format    = self.get_option("orig_config_format")
-        _location_format       = self.get_option("location_format")
-        _menu_end_format       = self.get_option("menu_end_format")
+        self.print_comment            = self.get_option("print_comment")
+        self.print_help               = self.get_option("print_help")
+        self.print_orig_config        = self.get_option("print_orig_config")
+        self.print_location           = self.get_option("print_location")
+        self.print_choice_item        = self.get_option("print_choice_item")
+        self.print_same_level_item    = self.get_option("print_same_level_item")
 
-        separator_char_list    = ['']*self.level_size
+        _print_first_level            = self.get_option("print_first_level")
+        _print_max_column             = self.get_option("print_max_column")
+        _prompt_indent_char           = self.get_option("prompt_indent_char")
+        _separator_indent_char        = self.get_option("separator_indent_char")
+        _separator_char_list          = self.get_option("separator_char_list")
+        _separator_format             = self.get_option("separator_format")
+        _info_indent_char             = self.get_option("info_indent_char")
+        _prompt_format                = self.get_option("prompt_format")
+        _help_format                  = self.get_option("help_format")
+        _help_line_format             = self.get_option("help_line_format")
+        _orig_config_format           = self.get_option("orig_config_format")
+        _location_format              = self.get_option("location_format")
+        _menu_end_format              = self.get_option("menu_end_format")
+
+        separator_char_list           = ['']*self.level_size
         separator_char_list[_print_first_level:_print_first_level+len(_separator_char_list)] = _separator_char_list
         self.print_first_level        = _print_first_level
-        self.print_comment            = _print_comment
-        self.print_help               = _print_help
-        self.print_orig_config        = _print_orig_config
-        self.print_location           = _print_location
-        self.print_choice_item        = _print_choice_item
         self.print_prompt_format      = []
         self.print_menu_end_format    = []
         self.print_location_format    = []
@@ -211,6 +209,18 @@ class DefConfigPrinter:
             self.print_node_tree(self.top_node     , False, file)
             
     def print_node_tree(self, node, force_print, file):
+        if self.print_same_level_item is True:
+            found_defined = False
+            all_symbol    = True
+            walk_node     = node
+            while walk_node:
+                if walk_node.defined:
+                    found_defined = True
+                if not walk_node.is_symbol:
+                    all_symbol = False
+                walk_node = walk_node.next
+            if found_defined is True and all_symbol is True:
+                force_print = True
         while node:
             if node.defined is True or force_print is True:
                 if node.is_menu:
@@ -384,6 +394,7 @@ def main():
     cc                = os.getenv("CC", f"{cross_compile}gcc")
     ld                = os.getenv("LD", f"{cross_compile}ld" )
     verbose           = False
+    recommended       = False
     print_options     = DefConfigPrinter.options()
                               
     parser = argparse.ArgumentParser(description='Print detailed defconfig')
@@ -439,6 +450,9 @@ def main():
                         type    = str,
                         default = ld,
                         action  = 'store')
+    parser.add_argument('-r', '--recommended',
+                        help    = 'Recommended Print Option',
+                        action  = 'store_true')
     parser.add_argument('-O', '--option',
                         help    = "OPTION in KEY or kKEY=VALUE)",
                         default = [],
@@ -462,6 +476,7 @@ def main():
     cross_compile     = args.cross_compile
     cc                = args.cc
     ld                = args.ld
+    recommended       = args.recommended
     verbose           = args.verbose
 
     if args.option_help is True:
@@ -502,8 +517,14 @@ def main():
         for help in option_help_list:
             print(f"     {help}")
         exit()
-        
+
     print_format_params = {}
+    if recommended is True:
+        print_format_params["print_orig_config"]     = True
+        print_format_params["print_choice_item"]     = True
+     ## print_format_params["print_same_level_item"] = True
+        print_format_params["separator_char_list"]   = ['=','-']
+        
     for option in args.option :
         if "=" in option:
             key, value = option.split("=",1)
