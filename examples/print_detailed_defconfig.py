@@ -26,45 +26,102 @@ class DefConfigPrinter:
             self.prompt    = menu_node.prompt[0] if menu_node.prompt else None
             self.help      = menu_node.help if hasattr(menu_node, "help") else None
 
+    _OPTIONS = {
+        "warnings"              : (False , "print warning"),
+        "stderr_warnings"       : (False , "print warning to stderr"),
+        "undef_warnings"        : (False , "print undef warning"),
+        "override_warnings"     : (False , "print override warning"),
+        "redun_warnings"        : (False , "print redun warning"),
+        "print_first_level"     : (1     , "print first level"),
+        "print_max_column"      : (80    , "print max column"),
+        "print_comment"         : (False , "print prompt with comment"),
+        "print_help"            : (False , "print prompt with help"),
+        "print_orig_config"     : (False , "print prompt with original config"),
+        "print_location"        : (False , "print prompt with location"),
+        "print_choice_item"     : (False , "print choice item"),
+        "prompt_indent_char"    : ('#'   , None),
+        "separator_indent_char" : ('#'   , None),
+        "info_indent_char"      : ('#'   , None),
+        "separator_char_list"   : ([]    , None),
+        "separator_format"      : ("{separator_indent} {separator_line}", None),
+        "prompt_format"         : ("#{separator}\n#{prompt_indent} {prompt}\n#{separator}", None),
+        "help_format"           : ("#{info_indent} help\n{help}\n#{info_indent}", None),
+        "help_line_format"      : ("#{info_indent}     {help_line}", None),
+        "orig_config_format"    : ("#{info_indent} {config}", None),
+        "location_format"       : ("#{info_indent} {filename} : {linenr}\n#{info_indent}", None),
+        "menu_end_format"       : ("#{prompt_indent} end of {prompt}\n", None),
+    }
+
+    @classmethod
+    def options(cls):
+        options_dict = {}
+        for name, value_list in cls._OPTIONS.items():
+            value = value_list[0]
+            if value_list[1] is None:
+                _help = name.replace("_", " ")
+            else:
+                _help = value_list[1]
+            options_dict[name] = {"name": name, "value": value, "help": _help}
+        return options_dict
+    
     def __init__(self, kconfig_file, options={}):
         self.kconf = Kconfig(kconfig_file)
 
-        kconf_options = ['enable_warnings'         , 'disable_warnings'         ,
-                         'enable_stderr_warnings'  , 'disable_stderr_warnings'  ,
-                         'enable_undef_warnings'   , 'disable_undef_warnings'   ,
-                         'enable_override_warnings', 'disable_override_warnings',
-                         'enable_redun_warnings'   , 'disable_redun_warnings'  ]
-        for name in options:
-            if name in kconf_options and hasattr(self.kconf, name):
-                getattr(self.kconf, name)()
-
+        self.options = DefConfigPrinter.options()
+        self.update_options(options)
+        self.update_kconf_option()
+        
         self.comment_match = re.compile(r"^#").match
         self.defined_config_list = []
         self.defined_config_dict = {}
         self.max_level           = 0
         self.level_size          = 0
         self.top_node            = None
-
-        self.print_format_params = {
-            "print_first_level"     : 1  ,
-            "print_max_column"      : 80 ,
-            "print_comment"         : False,
-            "print_help"            : False,
-            "print_orig_config"     : False,
-            "print_location"        : False,
-            "prompt_indent_char"    : '#',
-            "separator_indent_char" : '#',
-            "info_indent_char"      : '#',
-            "separator_char_list"   : [],
-            "separator_format"      : "{separator_indent} {separator_line}",
-            "prompt_format"         : "#{separator}\n#{prompt_indent} {prompt}\n#{separator}",
-            "help_format"           : "#{info_indent} help\n{help}\n#{info_indent}",
-            "help_line_format"      : "#{info_indent}     {help_line}",
-            "orig_config_format"    : "#{info_indent} {config}",
-            "location_format"       : "#{info_indent} {filename} : {linenr}\n#{info_indent}",
-            "menu_end_format"       : "#{prompt_indent} end of {prompt}\n",
-        }
         self.generate_print_format()
+
+    def update_kconf_option(self):
+        for key in ["warnings","stderr_warnings","undef_warnings","override_warnings","redun_warnings"]:
+            if self.get_option(key, False) is True:
+                getattr(self.kconf, f"enable_{key}")()
+            else:
+                getattr(self.kconf, f"disable_{key}")()
+
+    def get_option(self, name, default=None):
+        if name in self.options:
+            return self.options[name]["value"]
+        else:
+            return default
+
+    def update_options(self, options={}):
+        for name, value in options.items():
+            self.update_option(name, value)
+
+    def update_option(self, name, value):
+        name = name.replace("-", "_")
+        old_value = self.get_option(name)
+        new_value = None
+        if old_value is None:
+            raise KeyError(f"{name} is not option name")
+        if old_value.__class__ == list:
+            if   value is None:
+                new_value = []
+            elif value.__class__ == list:
+                new_value = value
+            else:
+                new_value = old_value + [value]
+        if old_value.__class__ == bool:
+            if   value.__class__ == bool:
+                new_value = value
+            elif value.__class__ == str:
+                if   value.lower() in ["y", "yes", "true" ]:
+                    new_value = True
+                elif value.lower() in ["n", "no" , "false"]:
+                    new_value = Fale
+            elif old_value.__class__ == value.__class__:
+               new_value = value
+        if new_value is None:
+            raise ValueError(f"{value} is invalid option value")
+        self.options[name]["value"] = new_value
 
     def preload_config_files(self, defconfig_files = [], verbose = None):
         replace = True
@@ -82,33 +139,35 @@ class DefConfigPrinter:
         self.level_size = self.max_level + 1
         self.generate_print_format()
         
-    def generate_print_format(self, params={}):
-        self.print_format_params.update(params)
-        _print_first_level     = self.print_format_params["print_first_level"]
-        _print_comment         = self.print_format_params["print_comment"]
-        _print_help            = self.print_format_params["print_help"]
-        _print_orig_config     = self.print_format_params["print_orig_config"]
-        _print_location        = self.print_format_params["print_location"]
-        _print_max_column      = self.print_format_params["print_max_column"]
-        _prompt_indent_char    = self.print_format_params["prompt_indent_char"]
-        _separator_indent_char = self.print_format_params["separator_indent_char"]
-        _separator_char_list   = self.print_format_params["separator_char_list"]
-        _separator_format      = self.print_format_params["separator_format"]
-        _info_indent_char      = self.print_format_params["info_indent_char"]
-        _prompt_format         = self.print_format_params["prompt_format"]
-        _help_format           = self.print_format_params["help_format"]
-        _help_line_format      = self.print_format_params["help_line_format"]
-        _orig_config_format    = self.print_format_params["orig_config_format"]
-        _location_format       = self.print_format_params["location_format"]
-        _menu_end_format       = self.print_format_params["menu_end_format"]
+    def generate_print_format(self, options={}):
+        self.update_options(options)
+        _print_first_level     = self.get_option("print_first_level")
+        _print_comment         = self.get_option("print_comment")
+        _print_help            = self.get_option("print_help")
+        _print_orig_config     = self.get_option("print_orig_config")
+        _print_location        = self.get_option("print_location")
+        _print_choice_item     = self.get_option("print_choice_item")
+        _print_max_column      = self.get_option("print_max_column")
+        _prompt_indent_char    = self.get_option("prompt_indent_char")
+        _separator_indent_char = self.get_option("separator_indent_char")
+        _separator_char_list   = self.get_option("separator_char_list")
+        _separator_format      = self.get_option("separator_format")
+        _info_indent_char      = self.get_option("info_indent_char")
+        _prompt_format         = self.get_option("prompt_format")
+        _help_format           = self.get_option("help_format")
+        _help_line_format      = self.get_option("help_line_format")
+        _orig_config_format    = self.get_option("orig_config_format")
+        _location_format       = self.get_option("location_format")
+        _menu_end_format       = self.get_option("menu_end_format")
 
-        separator_char_list  = ['']*self.level_size
+        separator_char_list    = ['']*self.level_size
         separator_char_list[_print_first_level:_print_first_level+len(_separator_char_list)] = _separator_char_list
         self.print_first_level        = _print_first_level
         self.print_comment            = _print_comment
         self.print_help               = _print_help
         self.print_orig_config        = _print_orig_config
         self.print_location           = _print_location
+        self.print_choice_item        = _print_choice_item
         self.print_prompt_format      = []
         self.print_menu_end_format    = []
         self.print_location_format    = []
@@ -177,7 +236,8 @@ class DefConfigPrinter:
         if need_new_line is True:
             print("", file=file)
         if node.list:
-            self.print_node_tree(node.list, node.is_choice, file)
+            print_choice_item = self.print_choice_item and node.is_choice
+            self.print_node_tree(node.list, print_choice_item, file)
         if node.prompt:
             format = self.print_menu_end_format[node.level]
             print(format.format(prompt=node.prompt), file=file)
@@ -312,24 +372,20 @@ class DefConfigPrinter:
             self.defined_config_dict[name] = config_info
 
 def main():
-    preload_files    = []
-    load_files       = []
-    merge_files      = []
-    output_file      = None
-    arch             = os.getenv("ARCH")
-    srcarch          = None
-    srctree          = '.'
-    kconfig_file     = 'Kconfig'
-    cross_compile    = os.getenv("CROSS_COMPILE", "")
-    cc               = os.getenv("CC", f"{cross_compile}gcc")
-    ld               = os.getenv("LD", f"{cross_compile}ld" )
-    separator        = False
-    with_help        = False
-    with_location    = False
-    with_orig_config = False
-    with_comment     = False
-    verbose          = False
-
+    preload_files     = []
+    load_files        = []
+    merge_files       = []
+    output_file       = None
+    arch              = os.getenv("ARCH")
+    srcarch           = None
+    srctree           = '.'
+    kconfig_file      = 'Kconfig'
+    cross_compile     = os.getenv("CROSS_COMPILE", "")
+    cc                = os.getenv("CC", f"{cross_compile}gcc")
+    ld                = os.getenv("LD", f"{cross_compile}ld" )
+    verbose           = False
+    print_options     = DefConfigPrinter.options()
+                              
     parser = argparse.ArgumentParser(description='Print detailed defconfig')
     parser.add_argument('load_files',
                         nargs   = '*',
@@ -383,20 +439,12 @@ def main():
                         type    = str,
                         default = ld,
                         action  = 'store')
-    parser.add_argument('--separator',
-                        help    = 'Print Prompt with Separator',
-                        action  = 'store_true')
-    parser.add_argument('--with-help',
-                        help    = 'Print Prompt with Help',
-                        action  = 'store_true')
-    parser.add_argument('--with-orig-config',
-                        help    = 'Print Prompt with Original Config',
-                        action  = 'store_true')
-    parser.add_argument('--with-location',
-                        help    = 'Print Prompt with Location',
-                        action  = 'store_true')
-    parser.add_argument('--with-comment',
-                        help    = 'Print Prompt with Comment',
+    parser.add_argument('-O', '--option',
+                        help    = "OPTION in KEY or kKEY=VALUE)",
+                        default = [],
+                        action  = 'append')
+    parser.add_argument('--option-help',
+                        help    = "OPTION help",
                         action  = 'store_true')
     parser.add_argument('-v', '--verbose',
                         help    = 'Verbose',
@@ -404,22 +452,74 @@ def main():
 
     args = parser.parse_args()
 
-    load_files       = args.load_files if args.load_files else []
-    merge_files      = args.merge      if args.merge      else []
-    preload_files    = args.preload    if args.preload    else []
-    output_file      = args.output
-    kconfig_file     = args.kconfig
-    arch             = args.arch
-    srctree          = args.srctree
-    cross_compile    = args.cross_compile
-    cc               = args.cc
-    ld               = args.ld
-    separator        = args.separator
-    with_help        = args.with_help
-    with_orig_config = args.with_orig_config
-    with_location    = args.with_location
-    with_comment     = args.with_comment
-    verbose          = args.verbose
+    load_files        = args.load_files if args.load_files else []
+    merge_files       = args.merge      if args.merge      else []
+    preload_files     = args.preload    if args.preload    else []
+    output_file       = args.output
+    kconfig_file      = args.kconfig
+    arch              = args.arch
+    srctree           = args.srctree
+    cross_compile     = args.cross_compile
+    cc                = args.cc
+    ld                = args.ld
+    verbose           = args.verbose
+
+    if args.option_help is True:
+        name_title    = "KEY"
+        default_title = "DEFAULT"
+        help_title    = "DESCRIPTION"
+        name_width    = len(name_title)
+        default_width = len(default_title)
+        help_width    = len(help_title)
+        option_list   = []
+        for key, info in print_options.items() :
+            if   info["value"].__class__ is bool:
+                _default = "yes" if info["value"] is True else "no"
+            elif info["value"].__class__ is int:
+                _default = str(info["value"])
+            elif info["value"].__class__ is list:
+                _default = "[" + ",".join(info["value"]) + "]"
+            else:
+                _default = "..."
+            _name = info["name"]
+            _help = info["help"]
+            option_list.append({"name": _name, "default": _default, "help": _help})
+            if len(_name) > name_width:
+                name_width = len(_name)
+            if len(_default) > default_width:
+                default_width = len(_default)
+            if len(_help) > help_width:
+                help_width = len(_help)
+        
+        _format = "| {:%d} | {:%d} | {:>%d} |" % (name_width, help_width, default_width)
+        divider = "|-{}-|-{}-|-{}-|".format("-"*name_width, "-"*help_width, "-"*default_width)
+        option_help_list = [_format.format(name_title, help_title, default_title), divider]
+        for info in option_list :
+            option_help_list.append(_format.format(info["name"], info["help"], info["default"]))
+        
+        print(f" -O OPTION, --option OPTION")
+        print(f"    OPTION in KEY or KEY=VALUE")
+        for help in option_help_list:
+            print(f"     {help}")
+        exit()
+        
+    print_format_params = {}
+    for option in args.option :
+        if "=" in option:
+            key, value = option.split("=",1)
+        else:
+            key, value = option, "yes"
+        name = key.replace("-", "_")
+        if name in print_options:
+            if print_options[name]["value"].__class__ is list:
+                if name in print_format_params:
+                    print_format_params[name].append(value)
+                else:
+                    print_format_params[name] = [value]
+            else:
+                print_format_params[name] = value
+        else:
+            raise KeyError(f"{name} is not option name")
 
     if   args.srcarch is not None:
         srcarch = args.srcarch
@@ -458,6 +558,7 @@ def main():
         print(f"## load defconfig files    = {load_files}")
         print(f"## merge defconfig files   = {merge_files}")
         print(f"## output file = {output_file}")
+        print(f"## print_format_params = {print_format_params}")
 
     os.environ["ARCH"]    = arch
     os.environ["SRCARCH"] = srcarch
@@ -465,26 +566,14 @@ def main():
     os.environ["LD"]      = ld
     os.environ["srctree"] = srctree
 
-    options = {"enable_undef_warnings": True}
+    options = {"undef_warnings": True}
 
     printer = DefConfigPrinter(os.path.join(srctree, kconfig_file), options)
     printer.preload_config_files(defconfig_files=preload_files)
     printer.load_config_files(defconfig_files=load_files , replace=True )
     printer.load_config_files(defconfig_files=merge_files, replace=False)
     
-    format_params = {}
-    if separator is True:
-        format_params["separator_char_list"] = ['=', '-']
-    if with_help is True:
-        format_params["print_help"] = True
-    if with_orig_config is True:
-        format_params["print_orig_config"] = True
-    if with_location is True:
-        format_params["print_location"] = True
-    if with_comment is True:
-        format_params["print_comment"] = True
-
-    printer.generate_print_format(format_params)
+    printer.generate_print_format(print_format_params)
 
     if output_file is None:
         printer.print()
