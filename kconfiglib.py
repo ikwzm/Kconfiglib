@@ -554,7 +554,7 @@ from glob import iglob
 from os.path import dirname, exists, expandvars, islink, join, realpath
 
 
-VERSION = (14, 1, 0)
+VERSION = (14, 2, 0)
 
 
 # File layout:
@@ -1054,6 +1054,7 @@ class Kconfig(object):
         self.top_node.filename = filename
         self.top_node.linenr = 1
         self.top_node.include_path = ()
+        self.top_node.transitional = False
 
         # Parse the Kconfig files
 
@@ -2935,6 +2936,7 @@ class Kconfig(object):
                 node.filename = self.filename
                 node.linenr = self.linenr
                 node.include_path = self._include_path
+                node.transitional = False
 
                 sym.nodes.append(node)
 
@@ -3004,6 +3006,7 @@ class Kconfig(object):
                 node.item = node.prompt = None
                 node.parent = parent
                 node.dep = self._expect_expr_and_eol()
+                node.transitional = False
 
                 self._parse_block(_T_ENDIF, node, node)
                 node.list = node.next
@@ -3021,6 +3024,7 @@ class Kconfig(object):
                 node.filename = self.filename
                 node.linenr = self.linenr
                 node.include_path = self._include_path
+                node.transitional = False
 
                 self.menus.append(node)
 
@@ -3041,6 +3045,7 @@ class Kconfig(object):
                 node.filename = self.filename
                 node.linenr = self.linenr
                 node.include_path = self._include_path
+                node.transitional = False
 
                 self.comments.append(node)
 
@@ -3073,6 +3078,7 @@ class Kconfig(object):
                 node.filename = self.filename
                 node.linenr = self.linenr
                 node.include_path = self._include_path
+                node.transitional = False
 
                 choice.nodes.append(node)
 
@@ -3283,6 +3289,9 @@ class Kconfig(object):
 
                 node.item.is_optional = True
 
+            elif t0 is _T_TRANSITIONAL:
+                node.transitional = True
+                
             else:
                 # Reuse the tokens for the non-property line later
                 self._reuse_tokens = True
@@ -5642,6 +5651,7 @@ class MenuNode(object):
         "selects",
         "implies",
         "ranges",
+        "transitional",
     )
 
     def __init__(self):
@@ -6910,10 +6920,11 @@ except AttributeError:
     _T_SELECT,
     _T_SOURCE,
     _T_STRING,
+    _T_TRANSITIONAL,
     _T_TRISTATE,
     _T_UNEQUAL,
     _T_VISIBLE,
-) = range(1, 51)
+) = range(1, 52)
 
 # Keyword to token map, with the get() method assigned directly as a small
 # optimization
@@ -6959,6 +6970,7 @@ _get_keyword = {
     "select":         _T_SELECT,
     "source":         _T_SOURCE,
     "string":         _T_STRING,
+    "transitional":   _T_TRANSITIONAL,
     "tristate":       _T_TRISTATE,
     "visible":        _T_VISIBLE,
 }.get
